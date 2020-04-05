@@ -17,59 +17,24 @@ matrix:
     - compiler: gcc
       env: CMAKE_CXX_COMPILER=g++-5
       os: linux
-    - compiler: clang
-      env: CMAKE_CXX_COMPILER=/usr/bin/clang++
-      os: osx
-
-before_install:
-    - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-          brew update; brew install qt5 fftw binutils create-dmg ;
-          export CMAKE_PREFIX_PATH=$(brew --prefix qt5) ;
-          echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}" ;
-      fi
-    - if [[ "$TRAVIS_OS_NAME" != "osx" ]]; then pip install cmake --user; fi
-
-before_script:
-    - mkdir build
-    - cd build
-    - cmake -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH} ../
 
 script:
-    - make -j4 # create either a bin or a bundle (.app) - depending on openhantek/CMakeLists.txt
-    - sudo make -j4 package # simply pack the binary, otherwise populate the bundle below
-    - if test -d openhantek/OpenHantek.app; then
-          export PATH=${CMAKE_PREFIX_PATH}/bin:${PATH} ;
-          cd openhantek ;
-          macdeployqt OpenHantek.app -always-overwrite -verbose=1 ;
-          python ../../utils/macdeployqtfix/macdeployqtfix.py OpenHantek.app/Contents/MacOS/OpenHantek ${CMAKE_PREFIX_PATH} ;
-          create-dmg --volname OpenHantek --volicon ../../openhantek/res/images/openhantek.icns --window-pos 200 120 --window-size 800 400 --icon-size 100 --icon "OpenHantek.app" 200 190 --hide-extension "OpenHantek.app" --app-drop-link 600 185 --eula ../../LICENSE OpenHantek.dmg OpenHantek.app ;
-          ls -lhAFRO@ OpenHantek.* ;
-          xattr -l OpenHantek.dmg ;
-          cd .. ;
-      else
-          ls -l packages ;
-          true;
-      fi
-    - ls -l openhantek || true
+  - if [[ "$TRAVIS_OS_NAME" != "osx" ]]; then pip install cmake --user; fi
+  - cmake ../ -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr  -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+  - make -j$(nproc)
+  - make DESTDIR=appdir -j$(nproc) install ; find appdir/
+  - wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
+  - chmod a+x linuxdeployqt-continuous-x86_64.AppImage
+  # export VERSION=... # linuxdeployqt uses this for naming the file
+  - ./linuxdeployqt-continuous-x86_64.AppImage appdir/usr/share/applications/*.desktop -appimage
 
-before_deploy:
-    - if test -d openhantek/OpenHantek.app; then
-          cd openhantek ;
-          sudo tar -cvzf ../packages/openhantek_*_osx_*.tar.gz OpenHantek.app ;
-          if test -f OpenHantek.dmg ; then
-            sudo mv OpenHantek.dmg ../packages/$(basename ../packages/openhantek_*_osx_*.tar.gz .tar.gz).dmg ;
-          fi ;
-          cd .. ;
-      else
-          true;
-      fi
-    - ls -l packages || true
-
-deploy:
-  provider: releases
-  api_key: $GITHUB_TOKEN
-  file_glob: true
-  file: packages/*
-  skip_cleanup: true
-  on:
-    tags: true
+after_success:
+  # find appdir -executable -type f -exec ldd {} \; | grep " => /usr" | cut -d " " -f 2-3 | sort | uniq # for debugging
+  # curl --upload-file APPNAME*.AppImage https://transfer.sh/APPNAME-git.$(git rev-parse --short HEAD)-x86_64.AppImage
+  - wget -c https://github.com/probonopd/uploadtool/raw/master/upload.sh
+  - bash upload.sh APPNAME*.AppImage*
+  
+branches:
+  except:
+    - # Do not build tags that we create when we upload to GitHub Releases
+    - /^(?i:continuous)/
