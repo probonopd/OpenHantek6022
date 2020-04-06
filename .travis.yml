@@ -20,19 +20,19 @@ matrix:
 
 script:
   - if [[ "$TRAVIS_OS_NAME" != "osx" ]]; then pip install cmake --user; fi
+  - mkdir build
+  - cd build
   - cmake ../ -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr  -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
   - make -j$(nproc)
   - make DESTDIR=appdir -j$(nproc) install ; find appdir/
   - wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
   - chmod a+x linuxdeployqt-continuous-x86_64.AppImage
-  # export VERSION=... # linuxdeployqt uses this for naming the file
+
   - ./linuxdeployqt-continuous-x86_64.AppImage appdir/usr/share/applications/*.desktop -appimage
 
 after_success:
-  # find appdir -executable -type f -exec ldd {} \; | grep " => /usr" | cut -d " " -f 2-3 | sort | uniq # for debugging
-  # curl --upload-file APPNAME*.AppImage https://transfer.sh/APPNAME-git.$(git rev-parse --short HEAD)-x86_64.AppImage
   - wget -c https://github.com/probonopd/uploadtool/raw/master/upload.sh
-  - bash upload.sh APPNAME*.AppImage*
+  - bash upload.sh OpenHantek*.AppImage*
   
 branches:
   except:
